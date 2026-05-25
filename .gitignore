@@ -1,0 +1,35 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Test/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime logs
+*.log
+logs/
+runs/
+score.json
+final_archive.tar.gz
+
+# Local env
+.env
+*.env
+.venv/
+venv/
+env/
+
+# Editor/system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp

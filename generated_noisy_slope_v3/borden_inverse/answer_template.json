@@ -1,0 +1,14 @@
+{
+  "source_type": "rectangular_region",
+  "dimension": 3,
+  "x_center": 0.0,
+  "y_center": 0.0,
+  "z_center": 0.0,
+  "half_length_x": 0.0,
+  "half_length_y": 0.0,
+  "half_length_z": 0.0,
+  "C0": 0.0,
+  "t_start": 0.0,
+  "duration": 0.0,
+  "method": "brief description of your inversion method"
+}

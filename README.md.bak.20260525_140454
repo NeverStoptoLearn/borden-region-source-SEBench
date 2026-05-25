@@ -1,0 +1,11 @@
+
+# Borden finite-duration rectangular-region source task package
+
+This package upgrades the previous Borden point-source task into a more difficult SE-Bench task.
+
+Main design change:
+- Reuse the existing Borden grid, hydrogeological parameters, monitoring-file format, and SE-Bench packaging pattern.
+- Modify the inverse problem from an effective point source to a finite-duration rectangular-region source.
+- Modify scoring so that easy format/method/prior checks add up to at most 15 points; hidden monitoring prediction dominates the score.
+
+See `FILE_STATUS.md` for exactly which files are unchanged, modified, or newly added.

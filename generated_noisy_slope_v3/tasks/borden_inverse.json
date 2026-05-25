@@ -1,0 +1,41 @@
+{
+  "task_id": "borden_inverse",
+  "name": "Borden finite-duration rectangular-region source inversion",
+  "language": "python310",
+  "base_image": "sebench.base.python310:latest",
+  "platform": "linux/amd64",
+  "cwd": "/home/workspace/borden_inverse",
+  "submit_paths": [
+    "."
+  ],
+  "submit_exclude": [
+    "scoring/",
+    "__pycache__/",
+    ".pytest_cache/",
+    "*.pyc",
+    "private_generation_record_not_for_agent.json",
+    "score.json"
+  ],
+  "internet": false,
+  "status": "ready",
+  "source": "Borden-AdePy generated groundwater inverse problem",
+  "work": {
+    "setup_cmds": [
+      "set -e\napt-get update\napt-get install -y --no-install-recommends curl unzip\nrm -rf /tmp/borden_unpack /tmp/borden_inverse_task_bundle.zip /home/workspace/borden_inverse\nmkdir -p /tmp/borden_unpack /home/workspace/borden_inverse\ncurl -fsSL http://host.docker.internal:8000/borden_inverse_task_bundle.zip -o /tmp/borden_inverse_task_bundle.zip\nunzip -q /tmp/borden_inverse_task_bundle.zip -d /tmp/borden_unpack\nif [ -d /tmp/borden_unpack/borden_inverse ]; then\n  cp -a /tmp/borden_unpack/borden_inverse/. /home/workspace/borden_inverse/\nelse\n  cp -a /tmp/borden_unpack/. /home/workspace/borden_inverse/\nfi\ncd /home/workspace/borden_inverse\necho \"[DEBUG] workspace files:\"\nfind . -maxdepth 3 -type f | sort | head -100\ntest -f requirements.txt\ntest -f public_problem_config.json",
+      "set -e\ncd /home/workspace/borden_inverse\npython -m pip install -r requirements.txt || true\nrm -rf scoring private_generation_record_not_for_agent.json score.json || true\necho \"[DEBUG] work workspace after hiding scoring:\"\nfind . -maxdepth 2 -type f | sort | head -100"
+    ],
+    "specs_dir": null,
+    "agent_query": "\n# Borden 3D Groundwater Contaminant Source Inversion\n\n## Task\nYou are given a Borden-style 3D groundwater contaminant migration scene derived from a Borden-AdePy reproduction workflow. Your task is to infer a **finite-duration rectangular-region contaminant source** from public monitoring-well readings.\n\nThis is not a point-source task. A point-source answer or the old `x0,y0,z0,C0` schema is accepted only as a degenerate fallback and cannot receive full credit.\n\n## Required source parameterization\nCreate `answer.json` in the task root using this schema:\n\n```json\n{\n  \"source_type\": \"rectangular_region\",\n  \"dimension\": 3,\n  \"x_center\": 0.0,\n  \"y_center\": 0.0,\n  \"z_center\": 0.0,\n  \"half_length_x\": 0.0,\n  \"half_length_y\": 0.0,\n  \"half_length_z\": 0.0,\n  \"C0\": 0.0,\n  \"t_start\": 0.0,\n  \"duration\": 0.0,\n  \"method\": \"brief description of your inversion method\"\n}\n```\n\n- `x_center,y_center,z_center`: center of the rectangular source region, in meters.\n- `half_length_x,half_length_y,half_length_z`: half sizes of the rectangular source region, in meters.\n- `C0`: effective source concentration/intensity, in mg/L.\n- `t_start`: release start time in days.\n- `duration`: release duration in days.\n\nAll parameters must stay within `public_problem_config.json` → `source_search_bounds_for_agent`.\n\n## Provided files\n\n- `public_problem_config.json`: Borden grid, hydrogeological parameters, source prior bounds, and column definitions.\n- `public_source_prior.json`: explicit range summary for the finite-duration rectangular-region source parameters.\n- `borden_grid.npz`: grid arrays exported from the Borden-AdePy scene, including x/y grid and bottom profile.\n- `public_wells.csv`: public monitoring-well coordinates.\n- `public_monitoring_data.csv`: public monitoring concentration time series.\n- `baseline_solver.py`: writes a legal low-quality baseline `answer.json` from the center of the parameter bounds.\n- `answer_template.json`: required output schema.\n\nNo runnable scientific starter solver is provided. You should write your own Python code to read files, build an ADE/AdePy or equivalent forward approximation, optimize the source parameters, and update `answer.json`.\n\n## Mandatory baseline workflow\n\nBefore implementing a complex inversion algorithm, first ensure that a valid `answer.json` exists:\n\n```bash\npython baseline_solver.py\n```\n\nThen iteratively improve `answer.json` using public monitoring data. Missing `answer.json` gives zero.\n\n## Scoring policy\n\nThe judge does not grade old point-source location error directly. It evaluates whether your finite-duration rectangular-region source predicts withheld monitoring readings:\n\n1. Read `answer.json`.\n2. Check required finite-region fields and parameter bounds.\n3. Use a hidden Borden-ADE region-source forward model to predict concentrations at hidden monitoring wells and hidden future times.\n4. Compare predictions with hidden readings using relative RMSE and log-scale metrics.\n5. Hidden prediction dominates the score. Easy format/prior/method points sum to at most 15.\n6. Region-shape and physical-consistency points are gated by hidden prediction quality.\n\nIf hidden monitoring prediction is poor, the final score is capped. This makes early baseline or shallow point-source fits low-scoring, while still allowing genuine improvement through better region-source inversion.\n\n## Rules\n\n- Do not read or reference hidden scoring files.\n- Do not hard-code hidden monitoring readings.\n- Do not modify judge files.\n- Do not call FloPy, MODFLOW, MT3DMS, or external groundwater executables.\n- You may use Python libraries such as NumPy, SciPy, pandas, matplotlib, pymoo, and AdePy if available.\n- Submit all scripts/results needed to reproduce your `answer.json`.\n\n## Critical scoring behavior\n\nThe judge only reads answer.json in the task root.\n\nThe judge does NOT automatically run inverse_solver.py, run_checks.py,\nwrite_fit_report.py, write_public_predictions.py, or any other script during scoring.\n\nTherefore, after every meaningful inversion or optimization step, you MUST overwrite\nthe task-root answer.json with the best current rectangular-region source parameters.\n\nIf answer.json is unchanged, the score and all METRICS will remain unchanged, even if\nyou create new scripts, reports, or prediction files.\n\nBefore each submission, explicitly check:\n\n    cat answer.json\n    sha256sum answer.json\n\nDo not submit unchanged baseline answers unless no better result has been found.\n"
+  },
+  "judge": {
+    "setup_cmds": [
+      "set -e\napt-get update\napt-get install -y --no-install-recommends curl unzip\nrm -rf /tmp/borden_unpack /tmp/borden_inverse_task_bundle.zip /home/workspace/borden_inverse\nmkdir -p /tmp/borden_unpack /home/workspace/borden_inverse\ncurl -fsSL http://host.docker.internal:8000/borden_inverse_task_bundle.zip -o /tmp/borden_inverse_task_bundle.zip\nunzip -q /tmp/borden_inverse_task_bundle.zip -d /tmp/borden_unpack\nif [ -d /tmp/borden_unpack/borden_inverse ]; then\n  cp -a /tmp/borden_unpack/borden_inverse/. /home/workspace/borden_inverse/\nelse\n  cp -a /tmp/borden_unpack/. /home/workspace/borden_inverse/\nfi\ncd /home/workspace/borden_inverse\necho \"[DEBUG] workspace files:\"\nfind . -maxdepth 3 -type f | sort | head -100\ntest -f requirements.txt\ntest -f public_problem_config.json",
+      "set -e\ncd /home/workspace/borden_inverse\npython -m pip install -r requirements.txt || true\ntest -d scoring\ntest -f scoring/evaluate.py\nmkdir -p /opt/borden_scoring\ncp -a scoring/. /opt/borden_scoring/\necho \"[DEBUG] judge scoring files:\"\nfind /opt/borden_scoring -maxdepth 2 -type f | sort\ntest -f /opt/borden_scoring/evaluate.py"
+    ],
+    "eval_cmd": "python /opt/borden_scoring/evaluate.py --submission_dir /home/workspace/borden_inverse --case_dir /home/workspace/borden_inverse --scoring_dir /opt/borden_scoring --output /home/workspace/borden_inverse/score.json",
+    "eval_timeout": 600,
+    "parser": "score_sum",
+    "score_direction": "maximize",
+    "selection": "best_score"
+  }
+}
