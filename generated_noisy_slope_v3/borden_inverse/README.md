@@ -22,6 +22,18 @@ Create `answer.json` in the task root using this schema:
   "C0": 0.0,
   "t_start": 0.0,
   "duration": 0.0,
+  "transport_model": {
+    "equation_type": "advection_dispersion_reaction",
+    "governing_equation": "R*dC/dt = div(D grad C) - v dot grad C - lambda*C + source",
+    "velocity_m_per_day": 0.0,
+    "alpha_L_m": 0.0,
+    "alpha_TH_m": 0.0,
+    "alpha_TV_m": 0.0,
+    "porosity": 0.0,
+    "retardation_factor": 1.0,
+    "lambda_per_day": 0.0,
+    "numerical_approach": "brief description of forward model and optimization"
+  },
   "method": "brief description of your inversion method"
 }
 ```
@@ -31,6 +43,9 @@ Create `answer.json` in the task root using this schema:
 - `C0`: effective source concentration/intensity, in mg/L.
 - `t_start`: release start time in days.
 - `duration`: release duration in days.
+- `transport_model`: your groundwater solute transport construction. Include the
+  ADE/reaction governing equation, public hydrogeologic parameters used, and the
+  numerical or analytical approximation used to predict concentrations.
 
 All parameters must stay within `public_problem_config.json` → `source_search_bounds_for_agent`.
 
@@ -45,7 +60,7 @@ All parameters must stay within `public_problem_config.json` → `source_search_
 - `baseline_solver.py`: writes a legal low-quality baseline `answer.json` from the center of the parameter bounds.
 - `answer_template.json`: required output schema.
 
-No runnable scientific starter solver is provided. You should write your own Python code to read files, build an ADE/AdePy or equivalent forward approximation, optimize the source parameters, and update `answer.json`.
+No runnable scientific starter solver is provided. You should write your own Python code to read files, construct the groundwater solute transport equation, build an ADE/AdePy or equivalent forward approximation, optimize the source parameters, and update `answer.json`.
 
 ## Mandatory baseline workflow
 
@@ -65,8 +80,9 @@ The judge does not grade old point-source location error directly. It evaluates 
 2. Check required finite-region fields and parameter bounds.
 3. Use a hidden Borden-ADE region-source forward model to predict concentrations at hidden monitoring wells and hidden future times.
 4. Compare predictions with hidden readings using relative RMSE and log-scale metrics.
-5. Hidden prediction dominates the score. Easy format/prior/method points sum to at most 15.
+5. Hidden prediction dominates the score. Easy format/prior/method/transport-equation points are capped and cannot exceed the hidden-quality caps.
 6. Region-shape and physical-consistency points are gated by hidden prediction quality.
+7. Very poor hidden/future prediction is capped at 15 points; poor-but-improving prediction is capped at 30 points; moderate prediction is capped at 45 points.
 
 If hidden monitoring prediction is poor, the final score is capped. This makes early baseline or shallow point-source fits low-scoring, while still allowing genuine improvement through better region-source inversion.
 

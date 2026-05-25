@@ -22,6 +22,18 @@ answer = {
     "C0": mid(b["C0_min"], b["C0_max"]),
     "t_start": mid(b["t_start_min"], b["t_start_max"]),
     "duration": mid(b["duration_min"], b["duration_max"]),
+    "transport_model": {
+        "equation_type": "advection_dispersion_reaction",
+        "governing_equation": "R*dC/dt = div(D grad C) - v dot grad C - lambda*C + source",
+        "velocity_m_per_day": cfg.get("hydrogeological_parameters", {}).get("velocity_m_per_day", 0.0),
+        "alpha_L_m": cfg.get("hydrogeological_parameters", {}).get("alpha_L_m", 0.0),
+        "alpha_TH_m": cfg.get("hydrogeological_parameters", {}).get("alpha_TH_m", 0.0),
+        "alpha_TV_m": cfg.get("hydrogeological_parameters", {}).get("alpha_TV_m", 0.0),
+        "porosity": cfg.get("hydrogeological_parameters", {}).get("porosity", 0.0),
+        "retardation_factor": cfg.get("hydrogeological_parameters", {}).get("retardation_factor", 1.0),
+        "lambda_per_day": cfg.get("hydrogeological_parameters", {}).get("lambda_per_day", 0.0),
+        "numerical_approach": "baseline placeholder; replace with calibrated ADE region-source model",
+    },
     "method": "baseline center of finite-duration rectangular-region source bounds; replace with optimized inversion result"
 }
 

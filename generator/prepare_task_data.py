@@ -99,13 +99,14 @@ def main():
         "public_data_policy": "agent sees only noisy censored public observations; clean public concentrations are private",
         "easy_points_max_after_caps": 5,
         "public_observed_sanity_score": 10,
-        "hidden_coarse_score": 30,
-        "hidden_precision_score": 55,
+        "transport_equation_score": 8,
+        "hidden_coarse_score": 14,
+        "hidden_precision_score": 71,
         "region_physics_score": 15,
         "caps": {
-            "if_hidden_or_future_rrmse_ge_2.35": 15,
-            "if_hidden_or_future_rrmse_ge_1.20": 30,
-            "if_hidden_rrmse_ge_0.45_or_future_rrmse_ge_0.50": 45
+            "if_hidden_or_future_rrmse_ge_1.60": 15,
+            "if_hidden_rrmse_ge_0.85_or_future_rrmse_ge_0.90": 30,
+            "if_hidden_rrmse_ge_0.35_or_future_rrmse_ge_0.40": 45
         }
     }
     write_json(hidden_eval_config, SCORING_DIR / "hidden_eval_config.json")
@@ -137,6 +138,18 @@ def main():
         "C0": mid(b["C0_min"], b["C0_max"]),
         "t_start": mid(b["t_start_min"], b["t_start_max"]),
         "duration": mid(b["duration_min"], b["duration_max"]),
+        "transport_model": {
+            "equation_type": "advection_dispersion_reaction",
+            "governing_equation": "R*dC/dt = div(D grad C) - v dot grad C - lambda*C + source",
+            "velocity_m_per_day": config.get("hydrogeological_parameters", {}).get("velocity_m_per_day", 0.0),
+            "alpha_L_m": config.get("hydrogeological_parameters", {}).get("alpha_L_m", 0.0),
+            "alpha_TH_m": config.get("hydrogeological_parameters", {}).get("alpha_TH_m", 0.0),
+            "alpha_TV_m": config.get("hydrogeological_parameters", {}).get("alpha_TV_m", 0.0),
+            "porosity": config.get("hydrogeological_parameters", {}).get("porosity", 0.0),
+            "retardation_factor": config.get("hydrogeological_parameters", {}).get("retardation_factor", 1.0),
+            "lambda_per_day": config.get("hydrogeological_parameters", {}).get("lambda_per_day", 0.0),
+            "numerical_approach": "baseline placeholder; replace with calibrated ADE region-source model",
+        },
         "method": "baseline center of finite-duration rectangular-region source bounds; replace with optimized inversion result",
     }
     write_json(baseline_answer, TASK_DIR / "answer.json")

@@ -11,6 +11,73 @@ import numpy as np
 import pandas as pd
 
 
+
+def emit_score_sum_agent_feedback(detail, metrics):
+    """Emit score_sum-compatible CASE lines so the Agent can see hidden/future feedback."""
+    def safe_float(x, default=999.0):
+        try:
+            v = float(x)
+            if v != v:
+                return default
+            return v
+        except Exception:
+            return default
+
+    def fmt_metric(x):
+        v = safe_float(x)
+        if v == 999.0:
+            return "NA"
+        return f"{v:.3f}".replace(".", "p").replace("-", "m")
+
+    def safe_token(x):
+        s = str(x)
+        keep = []
+        for ch in s:
+            if ch.isalnum() or ch in "_-":
+                keep.append(ch)
+            else:
+                keep.append("_")
+        return "".join(keep)[:80]
+
+    try:
+        detail = detail or {}
+        metrics = metrics or {}
+
+        hidden = metrics.get("hidden_well", {}) or {}
+        future = metrics.get("future_public", {}) or {}
+
+        hidden_rrmse = hidden.get("rRMSE")
+        future_rrmse = future.get("rRMSE")
+        hidden_log = hidden.get("log_rmse")
+        future_log = future.get("log_rmse")
+
+        cap_reason = detail.get("cap_reason", detail.get("metric_cap_reason", "none"))
+
+        print(f"CASE feedback_hidden_well_rRMSE_{fmt_metric(hidden_rrmse)} WA score=0")
+        print(f"CASE feedback_future_public_rRMSE_{fmt_metric(future_rrmse)} WA score=0")
+        print(f"CASE feedback_hidden_well_log_rmse_{fmt_metric(hidden_log)} WA score=0")
+        print(f"CASE feedback_future_public_log_rmse_{fmt_metric(future_log)} WA score=0")
+        print(f"CASE feedback_cap_reason_{safe_token(cap_reason)} WA score=0")
+        print(f"CASE feedback_transport_equation_score_{fmt_metric(detail.get('transport_equation_score', 0.0))} WA score=0")
+        transport = detail.get("transport_equation_detail", {}) or {}
+        terms = transport.get("recognized_terms", {}) or {}
+        for name in ["time", "advection", "dispersion", "reaction", "source"]:
+            status = "ok" if bool(terms.get(name)) else "missing"
+            print(f"CASE feedback_ade_term_{safe_token(name)}_{status} WA score=0")
+        hydro = transport.get("hydro_parameter_feedback", {}) or {}
+        for name in [
+            "velocity_m_per_day", "alpha_L_m", "alpha_TH_m", "alpha_TV_m",
+            "porosity", "retardation_factor", "lambda_per_day",
+        ]:
+            item = hydro.get(name, {}) or {}
+            status = safe_token(item.get("status", "missing"))
+            value = fmt_metric(item.get("value", 999.0))
+            expected = fmt_metric(item.get("expected", 999.0))
+            print(f"CASE feedback_hydro_{safe_token(name)}_{status}_value_{value}_ref_{expected} WA score=0")
+        approach_status = safe_token(transport.get("numerical_approach_status", "missing"))
+        print(f"CASE feedback_transport_numerical_approach_{approach_status} WA score=0")
+    except Exception as exc:
+        print(f"CASE feedback_emit_error_{safe_token(repr(exc))} WA score=0")
 TASK_NAME = "borden_inverse"
 
 
@@ -103,11 +170,11 @@ def metric_cap_reason(metrics: dict) -> str:
 
     hidden_rrmse = safe_float(hidden.get("rRMSE", float("inf")))
     future_rrmse = safe_float(future.get("rRMSE", float("inf")))
-    if hidden_rrmse >= 2.35 or future_rrmse >= 2.35:
+    if hidden_rrmse >= 1.60 or future_rrmse >= 1.60:
         return "cap15_public_only_or_very_poor_hidden"
-    if hidden_rrmse >= 1.20 or future_rrmse >= 1.20:
+    if hidden_rrmse >= 0.85 or future_rrmse >= 0.90:
         return "cap30_poor_but_improving_hidden"
-    if hidden_rrmse >= 0.45 or future_rrmse >= 0.50:
+    if hidden_rrmse >= 0.35 or future_rrmse >= 0.40:
         return "cap45_moderate_hidden"
     return "none"
 
@@ -159,15 +226,15 @@ def score_metric_linear(metrics: dict[str, Any]) -> tuple[float, dict[str, float
     hidden_log = safe_float(hidden.get("log_rmse"), float("inf"))
     future_log = safe_float(future.get("log_rmse"), float("inf"))
 
-    hidden_rrmse_coarse = smooth_linear_score(hidden_rrmse, good=1.20, bad=2.80, points=10, gamma=1.25)
-    future_rrmse_coarse = smooth_linear_score(future_rrmse, good=1.20, bad=2.80, points=10, gamma=1.25)
-    hidden_log_coarse = smooth_linear_score(hidden_log, good=0.050, bad=0.130, points=5, gamma=1.2)
-    future_log_coarse = smooth_linear_score(future_log, good=0.050, bad=0.130, points=5, gamma=1.2)
+    hidden_rrmse_coarse = smooth_linear_score(hidden_rrmse, good=0.85, bad=1.60, points=5, gamma=1.6)
+    future_rrmse_coarse = smooth_linear_score(future_rrmse, good=0.90, bad=1.60, points=5, gamma=1.6)
+    hidden_log_coarse = smooth_linear_score(hidden_log, good=0.035, bad=0.110, points=2, gamma=1.4)
+    future_log_coarse = smooth_linear_score(future_log, good=0.040, bad=0.120, points=2, gamma=1.4)
 
-    hidden_rrmse_precise = log_power_score(hidden_rrmse, good=0.05, bad=0.45, points=25, gamma=2.3)
-    future_rrmse_precise = log_power_score(future_rrmse, good=0.06, bad=0.50, points=20, gamma=2.3)
-    hidden_log_precise = log_power_score(hidden_log, good=0.012, bad=0.060, points=5, gamma=2.0)
-    future_log_precise = log_power_score(future_log, good=0.015, bad=0.070, points=5, gamma=2.0)
+    hidden_rrmse_precise = log_power_score(hidden_rrmse, good=0.04, bad=0.35, points=33, gamma=2.6)
+    future_rrmse_precise = log_power_score(future_rrmse, good=0.05, bad=0.40, points=25, gamma=2.6)
+    hidden_log_precise = log_power_score(hidden_log, good=0.010, bad=0.045, points=10, gamma=2.2)
+    future_log_precise = log_power_score(future_log, good=0.012, bad=0.055, points=10, gamma=2.2)
 
     total = (
         hidden_rrmse_coarse + future_rrmse_coarse + hidden_log_coarse + future_log_coarse
@@ -182,6 +249,10 @@ def score_metric_linear(metrics: dict[str, Any]) -> tuple[float, dict[str, float
         "future_rrmse_precise": future_rrmse_precise,
         "hidden_log_precise": hidden_log_precise,
         "future_log_precise": future_log_precise,
+        "hidden_rrmse_score": hidden_rrmse_coarse + hidden_rrmse_precise,
+        "future_rrmse_score": future_rrmse_coarse + future_rrmse_precise,
+        "hidden_log_score": hidden_log_coarse + hidden_log_precise,
+        "future_log_score": future_log_coarse + future_log_precise,
         "metric_score_linear": total,
     }
     return total, detail
@@ -452,6 +523,79 @@ def score_method_and_workflow(answer: dict[str, Any], submission_dir: Path) -> i
     return min(score, 5)
 
 
+def score_transport_equation(answer: dict[str, Any], config: dict[str, Any]) -> tuple[float, dict[str, Any]]:
+    """
+    Reward an explicit ADE solute transport construction, but keep it small.
+    This is learning feedback for agents; predictive hidden/future metrics still
+    control the final caps.
+    """
+    model = answer.get("transport_model", {})
+    if not isinstance(model, dict):
+        return 0.0, {"reason": "transport_model_missing_or_not_object"}
+
+    hydro = config.get("hydrogeological_parameters", {}) or {}
+    score = 0.0
+    detail: dict[str, Any] = {}
+
+    equation_text = " ".join([
+        str(model.get("equation_type", "")),
+        str(model.get("governing_equation", "")),
+        str(model.get("numerical_approach", "")),
+    ]).lower()
+    terms = {
+        "time": ("dc/dt" in equation_text) or ("time" in equation_text),
+        "advection": ("advection" in equation_text) or ("v dot grad" in equation_text) or ("velocity" in equation_text),
+        "dispersion": ("dispersion" in equation_text) or ("div(d grad" in equation_text) or ("alpha_l" in equation_text),
+        "reaction": ("lambda" in equation_text) or ("decay" in equation_text) or ("reaction" in equation_text),
+        "source": "source" in equation_text,
+    }
+    term_count = sum(bool(v) for v in terms.values())
+    score += min(3.0, 0.6 * term_count)
+    detail["recognized_terms"] = terms
+
+    numeric_checks = [
+        ("velocity_m_per_day", hydro.get("velocity_m_per_day")),
+        ("alpha_L_m", hydro.get("alpha_L_m")),
+        ("alpha_TH_m", hydro.get("alpha_TH_m")),
+        ("alpha_TV_m", hydro.get("alpha_TV_m")),
+        ("porosity", hydro.get("porosity")),
+        ("retardation_factor", hydro.get("retardation_factor")),
+        ("lambda_per_day", hydro.get("lambda_per_day")),
+    ]
+    matched = 0
+    hydro_feedback: dict[str, Any] = {}
+    for name, expected in numeric_checks:
+        got = safe_float(model.get(name), float("nan"))
+        exp = safe_float(expected, float("nan"))
+        hydro_feedback[name] = {
+            "value": got if math.isfinite(got) else None,
+            "expected": exp if math.isfinite(exp) else None,
+            "status": "missing_or_nonfinite",
+        }
+        if math.isfinite(got) and math.isfinite(exp):
+            tol = max(abs(exp) * 0.25, 1e-8)
+            if abs(got - exp) <= tol:
+                matched += 1
+                hydro_feedback[name]["status"] = "near_public_reference"
+            else:
+                hydro_feedback[name]["status"] = "far_from_public_reference"
+            hydro_feedback[name]["relative_error"] = abs(got - exp) / max(abs(exp), 1e-8)
+    score += min(3.0, 3.0 * matched / max(len(numeric_checks), 1))
+    detail["matched_public_hydro_parameters"] = matched
+    detail["hydro_parameter_feedback"] = hydro_feedback
+
+    approach = str(model.get("numerical_approach", "")).lower()
+    detail["numerical_approach_status"] = "missing_or_too_short"
+    if len(approach) >= 30:
+        score += 1.0
+        detail["numerical_approach_status"] = "described"
+    if any(k in approach for k in ["optimi", "least", "differential", "anneal", "grid", "multi-start", "multistart"]):
+        score += 1.0
+        detail["numerical_approach_status"] = "describes_optimization"
+    detail["transport_equation_score_raw"] = score
+    return min(score, 8.0), detail
+
+
 def score_public_sanity(answer: dict[str, Any], case_dir: Path, config: dict[str, Any], scoring_dir: Path) -> tuple[int, dict[str, Any]]:
     """
     Public observations are noisy and censored. This sanity score rewards
@@ -485,7 +629,7 @@ def score_region_physics(answer: dict[str, Any], metrics: dict[str, Any]) -> int
     hidden_rrmse = safe_float(metrics.get("hidden_well", {}).get("rRMSE"), float("inf"))
     future_rrmse = safe_float(metrics.get("future_public", {}).get("rRMSE"), float("inf"))
 
-    if hidden_rrmse >= 1.20 or future_rrmse >= 0.95:
+    if hidden_rrmse >= 0.85 or future_rrmse >= 0.90:
         return 0
 
     vals = {
@@ -543,6 +687,8 @@ def evaluate(submission_dir: Path, case_dir: Path, scoring_dir: Path, output: Pa
         "bounds_score": 0,
         "public_sanity_score": 0,
         "method_workflow_score": 0,
+        "transport_equation_score": 0,
+        "transport_equation_detail": {},
         "metric_score_linear": 0,
         "region_physics_score": 0,
         "metric_score_detail": {},
@@ -584,11 +730,15 @@ def evaluate(submission_dir: Path, case_dir: Path, scoring_dir: Path, output: Pa
         "C0": answer.get("C0"),
         "t_start": answer.get("t_start"),
         "duration": answer.get("duration"),
+        "transport_model": answer.get("transport_model"),
     }
 
     detail["format_score"] = score_format(answer, True)
     detail["bounds_score"] = score_bounds(answer, config, prior_path)
     detail["method_workflow_score"] = score_method_and_workflow(answer, submission_dir)
+    transport_score, transport_detail = score_transport_equation(answer, config)
+    detail["transport_equation_score"] = transport_score
+    detail["transport_equation_detail"] = transport_detail
     detail["warnings"].extend(inspect_forbidden_access(submission_dir))
 
     # Public sanity score is small and intentionally non-dominant.
@@ -628,12 +778,13 @@ def evaluate(submission_dir: Path, case_dir: Path, scoring_dir: Path, output: Pa
     detail["bounds_score"] = min(float(detail["bounds_score"]), 1.0)
     detail["public_sanity_score"] = min(float(detail["public_sanity_score"]), 2.0)
     detail["method_workflow_score"] = min(float(detail["method_workflow_score"]), 1.0)
+    detail["transport_equation_score"] = min(float(detail["transport_equation_score"]), 2.0)
 
     metrics_for_caps = detail.get("metrics", {}) or {}
     hidden_rrmse = safe_float(metrics_for_caps.get("hidden_well", {}).get("rRMSE"), float("inf"))
     future_rrmse = safe_float(metrics_for_caps.get("future_public", {}).get("rRMSE"), float("inf"))
     detail["region_physics_score_before_gate"] = round3(detail["region_physics_score"])
-    if hidden_rrmse >= 0.45 or future_rrmse >= 0.50:
+    if hidden_rrmse >= 0.35 or future_rrmse >= 0.40:
         detail["region_physics_score"] = 0.0
         detail["region_physics_gate"] = "blocked_by_hidden_or_future_rrmse"
     else:
@@ -645,6 +796,7 @@ def evaluate(submission_dir: Path, case_dir: Path, scoring_dir: Path, output: Pa
         + detail["bounds_score"]
         + detail["public_sanity_score"]
         + detail["method_workflow_score"]
+        + detail["transport_equation_score"]
         + detail["metric_score_linear"]
         + detail["region_physics_score"]
     )
@@ -660,6 +812,7 @@ def evaluate(submission_dir: Path, case_dir: Path, scoring_dir: Path, output: Pa
     print(f"CASE borden_inverse OK score={float(detail['total_score']):.3f}")
     print(f"RAW_TOTAL_SCORE {float(locals().get('raw_total', detail.get('raw_total', detail.get('raw_total_before_cap', detail.get('total_score', 0.0))))):.3f}")
     print(f"TOTAL_SCORE {float(detail['total_score']):.3f}")
+    emit_score_sum_agent_feedback(detail, metrics)
     print("SCORE_BREAKDOWN", json.dumps({
         "raw_total_before_cap": detail["raw_total_before_cap"],
         "cap_reason": detail["cap_reason"],
@@ -667,11 +820,123 @@ def evaluate(submission_dir: Path, case_dir: Path, scoring_dir: Path, output: Pa
         "bounds_score": detail["bounds_score"],
         "public_sanity_score": detail["public_sanity_score"],
         "method_workflow_score": detail["method_workflow_score"],
+        "transport_equation_score": detail["transport_equation_score"],
+        "transport_equation_detail": detail["transport_equation_detail"],
         "metric_score_linear": detail["metric_score_linear"],
         "region_physics_score": detail["region_physics_score"],
         "metric_score_detail": detail["metric_score_detail"],
     }, ensure_ascii=False))
     print("METRICS", json.dumps(detail.get("metrics", {}), ensure_ascii=False))
+
+    # ---- SE-Bench structured_json feedback block ----
+    try:
+        _detail = locals().get("detail", locals().get("score_detail", {}))
+        _metrics = locals().get("metrics", {})
+        _answer_summary = locals().get("answer_summary", locals().get("summary", {}))
+
+        def _safe_float(x, default=999.0):
+            try:
+                v = float(x)
+                if v != v:
+                    return default
+                return v
+            except Exception:
+                return default
+
+        _hidden = _metrics.get("hidden_well", {}) or {}
+        _future = _metrics.get("future_public", {}) or {}
+
+        _hidden_rrmse = _safe_float(_hidden.get("rRMSE"))
+        _future_rrmse = _safe_float(_future.get("rRMSE"))
+        _hidden_log = _safe_float(_hidden.get("log_rmse"))
+        _future_log = _safe_float(_future.get("log_rmse"))
+
+        _total_score = _safe_float(
+            _detail.get("total_score", locals().get("total_score", locals().get("score", 0.0))),
+            default=0.0,
+        )
+        _raw_total = _safe_float(
+            _detail.get("raw_total_before_cap", _detail.get("raw_total_score", _total_score)),
+            default=_total_score,
+        )
+
+        _cap_reason = _detail.get("cap_reason", _detail.get("metric_cap_reason", "none"))
+
+        _metric_detail = _detail.get("metric_score_detail", {}) or {}
+
+        structured_result = {
+            "valid": True,
+            "score": float(_total_score),
+            "pass_rate": 1.0,
+            "summary": (
+                f"TOTAL_SCORE={_total_score:.3f}; "
+                f"RAW_TOTAL_SCORE={_raw_total:.3f}; "
+                f"cap_reason={_cap_reason}; "
+                f"hidden_well_rRMSE={_hidden_rrmse}; "
+                f"future_public_rRMSE={_future_rrmse}; "
+                f"hidden_well_log_rmse={_hidden_log}; "
+                f"future_public_log_rmse={_future_log}"
+            ),
+            "metrics": {
+                "total_score": float(_total_score),
+                "raw_total_score": float(_raw_total),
+                "cap_reason": _cap_reason,
+                "hidden_well_rRMSE": _hidden_rrmse,
+                "future_public_rRMSE": _future_rrmse,
+                "hidden_well_log_rmse": _hidden_log,
+                "future_public_log_rmse": _future_log,
+                "format_score": _detail.get("format_score"),
+                "bounds_score": _detail.get("bounds_score"),
+                "public_sanity_score": _detail.get("public_sanity_score"),
+                "method_workflow_score": _detail.get("method_workflow_score"),
+                "transport_equation_score": _detail.get("transport_equation_score"),
+                "transport_equation_detail": _detail.get("transport_equation_detail"),
+                "region_physics_score": _detail.get("region_physics_score"),
+                "hidden_rrmse_score": _metric_detail.get("hidden_rrmse_score"),
+                "future_rrmse_score": _metric_detail.get("future_rrmse_score"),
+                "hidden_log_score": _metric_detail.get("hidden_log_score"),
+                "future_log_score": _metric_detail.get("future_log_score"),
+                "score_breakdown": _detail,
+                "answer_summary": _answer_summary,
+            },
+            "details": [
+                {
+                    "name": "format_validity",
+                    "status": "PASSED" if _safe_float(_detail.get("format_score", 0), 0) > 0 else "FAILED",
+                    "score": _detail.get("format_score", 0),
+                    "weight": 2,
+                    "message": "answer.json schema and required fields check",
+                },
+                {
+                    "name": "hidden_well_prediction",
+                    "status": "PASSED" if _hidden_rrmse < 0.25 else "FAILED",
+                    "score": _metric_detail.get("hidden_rrmse_score", 0),
+                    "weight": 45,
+                    "message": f"hidden_well rRMSE={_hidden_rrmse}",
+                },
+                {
+                    "name": "future_time_extrapolation",
+                    "status": "PASSED" if _future_rrmse < 0.35 else "FAILED",
+                    "score": _metric_detail.get("future_rrmse_score", 0),
+                    "weight": 30,
+                    "message": f"future_public rRMSE={_future_rrmse}",
+                },
+                {
+                    "name": "quality_cap",
+                    "status": "PASSED" if str(_cap_reason) == "none" else "FAILED",
+                    "score": float(_total_score),
+                    "weight": 100,
+                    "message": f"cap_reason={_cap_reason}",
+                },
+            ],
+        }
+
+        print(">>>>> Start Structured Result")
+        print(json.dumps(structured_result, ensure_ascii=False))
+        print(">>>>> End Structured Result")
+    except Exception as _structured_exc:
+        print("STRUCTURED_RESULT_ERROR", repr(_structured_exc))
+    # ---- End SE-Bench structured_json feedback block ----
     if detail["warnings"]:
         print("WARNINGS", json.dumps(detail["warnings"], ensure_ascii=False))
     if detail["errors"]:
