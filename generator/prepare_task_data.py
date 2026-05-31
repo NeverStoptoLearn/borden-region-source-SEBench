@@ -96,17 +96,32 @@ def main():
     # Judge hidden files
     hidden_eval_config = {
         "scoring_policy": "finite_region_hidden_monitoring_prediction",
-        "public_data_policy": "agent sees only noisy censored public observations; clean public concentrations are private",
+        "public_data_policy": "agent sees noisy censored public observations and the exact public ADE forward operator; clean public concentrations are private",
+        "feedback_policy": "structured output exposes component scores, coarse hidden/future bands, cap reasons, and next-step hints without hidden observations or true source parameters",
+        "model_relevance_policy": "submitted forward_model.py should match the public finite-region ADE operator; hidden/future prediction quality is the main ranking signal",
         "easy_points_max_after_caps": 5,
         "public_observed_sanity_score": 10,
         "transport_equation_score": 8,
         "hidden_coarse_score": 14,
         "hidden_precision_score": 71,
         "region_physics_score": 15,
+        "physical_constraints": [
+            "source center and half-lengths must keep the rectangular region inside the model domain",
+            "source vertical extent must remain inside the saturated aquifer",
+            "source rectangle must remain inside the original Borden source-zone prior with one-cell tolerance",
+            "region shape, timing, and source-mass proxy are compared to the hidden generated source for physics credit"
+        ],
         "caps": {
             "if_hidden_or_future_rrmse_ge_1.60": 15,
-            "if_hidden_rrmse_ge_0.85_or_future_rrmse_ge_0.90": 30,
-            "if_hidden_rrmse_ge_0.35_or_future_rrmse_ge_0.40": 45
+            "if_hidden_rrmse_ge_0.20_or_future_rrmse_ge_0.25": 30,
+            "if_hidden_rrmse_ge_0.12_or_future_rrmse_ge_0.16": 45,
+            "if_source_region_outside_domain_or_aquifer": 30,
+            "if_source_region_outside_original_source_zone": 45,
+            "if_region_physics_score_lt_12": 15,
+            "if_region_physics_score_lt_14": 30,
+            "if_submitted_ade_forward_model_is_missing_or_invalid": 15,
+            "if_submitted_ade_forward_model_fails_public_probes": 40,
+            "maximum_total_score": 100
         }
     }
     write_json(hidden_eval_config, SCORING_DIR / "hidden_eval_config.json")
@@ -120,7 +135,14 @@ def main():
     template_root = ROOT / "templates"
     for name in ["hidden_forward_model.py", "evaluate.py"]:
         shutil.copyfile(template_root / name, SCORING_DIR / name)
-    for name in ["README.md", "requirements.txt", "answer_template.json", "baseline_solver.py"]:
+    for name in [
+        "README.md",
+        "requirements.txt",
+        "answer_template.json",
+        "baseline_solver.py",
+        "public_forward_model.py",
+        "local_validate_forward_model.py",
+    ]:
         shutil.copyfile(template_root / name, TASK_DIR / name)
 
     # Baseline answer
@@ -148,6 +170,8 @@ def main():
             "porosity": config.get("hydrogeological_parameters", {}).get("porosity", 0.0),
             "retardation_factor": config.get("hydrogeological_parameters", {}).get("retardation_factor", 1.0),
             "lambda_per_day": config.get("hydrogeological_parameters", {}).get("lambda_per_day", 0.0),
+            "implementation_file": "forward_model.py",
+            "implementation_function": "predict_from_answer",
             "numerical_approach": "baseline placeholder; replace with calibrated ADE region-source model",
         },
         "method": "baseline center of finite-duration rectangular-region source bounds; replace with optimized inversion result",
@@ -156,6 +180,8 @@ def main():
 
     shutil.copyfile(template_root / "borden_inverse.json", TASKS_DIR / "borden_inverse.json")
     shutil.copyfile(template_root / "README_DEPLOY.md", OUT / "README_DEPLOY.md")
+    shutil.copyfile(template_root / "JUDGE_FEEDBACK_POLICY.md", TASK_DIR / "JUDGE_FEEDBACK_POLICY.md")
+    shutil.copyfile(template_root / "JUDGE_FEEDBACK_POLICY.md", OUT / "JUDGE_FEEDBACK_POLICY.md")
 
     make_zip(TASK_DIR, OUT / "borden_inverse_task_bundle.zip")
     print("Generated:", OUT)

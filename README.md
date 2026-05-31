@@ -45,7 +45,7 @@ The Agent must create an `answer.json` file in the task root using the following
 }
 ```
 
-The Judge does **not** directly score old point-source parameters such as `x0`, `y0`, `z0`, and `C0`. Instead, it evaluates whether the submitted rectangular-region source can predict withheld monitoring readings.
+The Judge does **not** directly score old point-source parameters such as `x0`, `y0`, `z0`, and `C0`. Instead, it first checks whether the submitted `forward_model.py` solves the finite-region ADE on public probes, then evaluates whether the submitted rectangular-region source can predict withheld monitoring readings.
 
 ---
 
@@ -164,8 +164,8 @@ Key fields:
 task_id: borden_inverse
 cwd: /home/workspace/borden_inverse
 submit_paths: ["."]
-parser: score_sum
-selection: best_score
+parser: structured_json
+selection: score_first
 eval_timeout: 600
 ```
 
@@ -179,7 +179,7 @@ The work image hides the `scoring/` directory so that the Agent cannot access hi
 
 ## 5. Scoring Rule
 
-The final score is 100 points. The latest version uses a hidden-prediction-dominated scoring policy.
+The final score is capped at 100 points. The latest version makes the finite-region ADE operator public through `public_forward_model.py`, `local_validate_forward_model.py`, and source-flux/discretization constants in `public_problem_config.json`. The judge still checks static `forward_model.py` relevance and dynamic public ADE correctness with a `7.5 / 10` threshold, but score separation is intended to come primarily from hidden-well and future-time prediction rather than reverse-engineering the forward operator. Internally the judge keeps the process/DAG score and caps; externally it translates that state into project-review style feedback.
 
 | Component | Points |
 |---|---:|
@@ -187,17 +187,29 @@ The final score is 100 points. The latest version uses a hidden-prediction-domin
 | Parameter bounds validity | 1 |
 | Public observation sanity check | 2 |
 | ADE / rectangular-region method explanation | 2 |
-| Hidden monitoring-well prediction | 51 |
-| Hidden future-time extrapolation | 37 |
-| Region shape and physical consistency | 5 |
+| Static ADE model relevance | 2 / gate feedback |
+| Dynamic public ADE correctness | 8 / gate feedback |
+| Hidden monitoring-well prediction | 45 |
+| Hidden future-time extrapolation | 30 |
+| Region shape and physical consistency | 8 |
 | Anti-cheating | penalty / zero only |
 
-The main metrics are:
+The private main metrics are:
 
 - `hidden_well rRMSE`
 - `hidden_well log_rmse`
 - `future_public rRMSE`
 - `future_public log_rmse`
+
+During iterative evaluation, the Agent sees review fields such as `REVIEW_STATUS`, `PROCESS_STAGE`, `MODEL_STATUS`, `PUBLIC_FIT`, `VALIDATION_STATUS`, `NEXT_REVIEW`, and qualitative stage reviews. Exact hidden/future metric values, component scores, cap internals, hidden observations, true source parameters, and pointwise hidden residuals are kept inside `score.json` and are not printed in the structured result block.
+
+The intended interpretation is:
+
+- structured `score`: official internal process score after caps. Use this for final ranking.
+- review fields: qualitative feedback derived from the internal score state, phrased as project review rather than hidden metric disclosure.
+- `score.json`: author-side internal diagnostics; not intended as agent-visible feedback.
+
+See `JUDGE_FEEDBACK_POLICY.md` for the saved policy summary.
 
 ### 5.1 Truncated Logarithmic Power Score
 
@@ -217,41 +229,38 @@ Current thresholds:
 
 | Metric | good | bad | points | gamma |
 |---|---:|---:|---:|---:|
-| `hidden_well rRMSE` | 0.05 | 0.25 | 45 | 2.5 |
-| `future_public rRMSE` | 0.06 | 0.35 | 30 | 2.5 |
-| `hidden_well log_rmse` | 0.012 | 0.040 | 6 | 2.0 |
-| `future_public log_rmse` | 0.015 | 0.050 | 7 | 2.0 |
+| `hidden_well rRMSE` | 0.04 | 0.35 | 38 | 2.6 |
+| `future_public rRMSE` | 0.05 | 0.40 | 30 | 2.6 |
+| `hidden_well log_rmse` | 0.010 | 0.045 | 12 | 2.2 |
+| `future_public log_rmse` | 0.012 | 0.055 | 12 | 2.2 |
 
 ### 5.2 Quality Caps
 
 Quality caps are applied after computing `RAW_TOTAL_SCORE`:
 
 ```text
-hidden_well rRMSE >= 0.45 or future_public rRMSE >= 0.50:
+hidden_well rRMSE >= 1.60 or future_public rRMSE >= 1.60:
     TOTAL_SCORE <= 15
 
-hidden_well rRMSE >= 0.28 or future_public rRMSE >= 0.35:
-    TOTAL_SCORE <= 25
+hidden_well rRMSE >= 0.85 or future_public rRMSE >= 0.90:
+    TOTAL_SCORE <= 30
 
-hidden_well rRMSE >= 0.18 or future_public rRMSE >= 0.25:
-    TOTAL_SCORE <= 35
+hidden_well rRMSE >= 0.35 or future_public rRMSE >= 0.40:
+    TOTAL_SCORE <= 45
 
-hidden_well log_rmse >= 0.08 or future_public log_rmse >= 0.10:
-    TOTAL_SCORE <= 35
+source region outside domain or saturated aquifer:
+    TOTAL_SCORE <= 30
+
+source region outside original source-zone prior:
+    TOTAL_SCORE <= 45
+
+weak region physics consistency:
+    TOTAL_SCORE <= 60
 ```
 
 ### 5.3 Region Shape and Physical-Consistency Gate
 
-The region-shape and physical-consistency score is at most 5 points and is gated by hidden prediction quality:
-
-```text
-if hidden_well rRMSE >= 0.18 or future_public rRMSE >= 0.25:
-    region_physics_score = 0
-else:
-    region_physics_score <= 5
-```
-
-This prevents shallow public-data fits from receiving high physical-reasonableness points when hidden prediction quality is poor.
+The region-shape and physical-consistency score is at most 15 points. It checks the submitted rectangle against the model domain, saturated vertical extent, original source-zone prior, hidden generated source shape, release timing, and a source-mass proxy. This prevents shallow public-data fits or unphysical surrogate regions from receiving high physical-reasonableness points when prediction quality is not physically explainable.
 
 ---
 
@@ -287,12 +296,11 @@ cat /tmp/manual_score.json
 Expected output includes:
 
 ```text
-ANSWER_SUMMARY {...}
-SCORE_BREAKDOWN {...}
 RAW_TOTAL_SCORE ...
 CASE borden_inverse OK score=...
 TOTAL_SCORE ...
-METRICS {...}
+PREDICTION_BAND ...
+PHYSICAL_CONSTRAINTS ...
 ```
 
 ---
@@ -383,7 +391,7 @@ cd /root/SE-bench-main/logs/runs/$RUN_ID/borden_inverse/submissions
 
 for d in $(ls -d agent-* auto-* 2>/dev/null | sort -V); do
   echo "================ $d ================"
-  grep -E "ANSWER_SUMMARY|SCORE_BREAKDOWN|RAW_TOTAL_SCORE|CASE borden_inverse|TOTAL_SCORE|METRICS" "$d/test_output.txt"
+  grep -E "RAW_TOTAL_SCORE|CASE borden_inverse|TOTAL_SCORE|PREDICTION_BAND|PHYSICAL_CONSTRAINTS" "$d/test_output.txt"
 done
 ```
 

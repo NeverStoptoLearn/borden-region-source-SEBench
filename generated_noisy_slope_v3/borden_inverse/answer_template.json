@@ -20,6 +20,8 @@
     "porosity": 0.0,
     "retardation_factor": 1.0,
     "lambda_per_day": 0.0,
+    "implementation_file": "forward_model.py",
+    "implementation_function": "predict_from_answer",
     "numerical_approach": "brief description of forward model and optimization"
   },
   "method": "brief description of your inversion method"

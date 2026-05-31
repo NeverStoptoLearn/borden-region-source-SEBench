@@ -32,6 +32,8 @@ answer = {
         "porosity": cfg.get("hydrogeological_parameters", {}).get("porosity", 0.0),
         "retardation_factor": cfg.get("hydrogeological_parameters", {}).get("retardation_factor", 1.0),
         "lambda_per_day": cfg.get("hydrogeological_parameters", {}).get("lambda_per_day", 0.0),
+        "implementation_file": "forward_model.py",
+        "implementation_function": "predict_from_answer",
         "numerical_approach": "baseline placeholder; replace with calibrated ADE region-source model",
     },
     "method": "baseline center of finite-duration rectangular-region source bounds; replace with optimized inversion result"

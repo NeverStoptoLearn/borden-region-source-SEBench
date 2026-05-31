@@ -10,6 +10,8 @@ Important fields added/renamed:
 - Renamed `judge.setup` to `judge.setup_cmds`.
 - Renamed `judge.test` to `judge.eval_cmd`.
 - Added `judge.eval_timeout`, `judge.parser`, `judge.score_direction`, and `judge.selection`.
-- Set `judge.parser` to `score_sum`. Therefore `evaluate.py` now prints lines such as `CASE borden_inverse OK score=15` and `TOTAL_SCORE 15`.
+- Set `judge.parser` to `structured_json` and `judge.selection` to `score_first` for continuous scoring.
+- `evaluate.py` still prints `CASE ...` and `TOTAL_SCORE ...` lines for human readability, but the SE-Bench result is now read from the structured result block.
+- The structured result intentionally exposes only score, coarse prediction band, cap reason, and physical-constraint status. It does not expose hidden/future RMSE or hidden answer summaries.
 
 The scientific task files and region-source generator are otherwise unchanged.

@@ -80,12 +80,21 @@ def _fallback_point3(c0, x, y, z, t, v, porosity, al, ah, av, q_source, source_x
     return np.maximum(val, 0.0)
 
 
+def _axis_points(center, half_length, n):
+    center = float(center)
+    half_length = float(half_length)
+    n = int(n)
+    if n <= 1:
+        return np.array([center], dtype=float)
+    return np.linspace(center - half_length, center + half_length, n)
+
+
 def _region_subpoints(source, config):
     disc = config.get("region_source_discretization", {})
-    nx = int(disc.get("nx", 5)); ny = int(disc.get("ny", 5)); nz = int(disc.get("nz", 1))
-    xs = np.linspace(source["x_center"] - source["half_length_x"], source["x_center"] + source["half_length_x"], nx)
-    ys = np.linspace(source["y_center"] - source["half_length_y"], source["y_center"] + source["half_length_y"], ny)
-    zs = np.linspace(source["z_center"] - source["half_length_z"], source["z_center"] + source["half_length_z"], nz)
+    nx = int(disc.get("nx", 5)); ny = int(disc.get("ny", 5)); nz = int(disc.get("nz", 3))
+    xs = _axis_points(source["x_center"], source["half_length_x"], nx)
+    ys = _axis_points(source["y_center"], source["half_length_y"], ny)
+    zs = _axis_points(source["z_center"], source["half_length_z"], nz)
     return [(float(x), float(y), float(z)) for x in xs for y in ys for z in zs]
 
 

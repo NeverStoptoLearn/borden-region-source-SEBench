@@ -193,14 +193,23 @@ def normalize_region_answer(source_params: Dict[str, Any], config: Dict[str, Any
     return out
 
 
+def _axis_points(center: float, half_length: float, n: int) -> np.ndarray:
+    center = float(center)
+    half_length = float(half_length)
+    n = int(n)
+    if n <= 1:
+        return np.array([center], dtype=float)
+    return np.linspace(center - half_length, center + half_length, n)
+
+
 def _region_subpoints(source: Dict[str, Any], config: Dict[str, Any]):
     disc = config.get("region_source_discretization", {})
     nx = int(disc.get("nx", 5))
     ny = int(disc.get("ny", 5))
-    nz = int(disc.get("nz", 1))
-    xs = np.linspace(source["x_center"] - source["half_length_x"], source["x_center"] + source["half_length_x"], nx)
-    ys = np.linspace(source["y_center"] - source["half_length_y"], source["y_center"] + source["half_length_y"], ny)
-    zs = np.linspace(source["z_center"] - source["half_length_z"], source["z_center"] + source["half_length_z"], nz)
+    nz = int(disc.get("nz", 3))
+    xs = _axis_points(source["x_center"], source["half_length_x"], nx)
+    ys = _axis_points(source["y_center"], source["half_length_y"], ny)
+    zs = _axis_points(source["z_center"], source["half_length_z"], nz)
     pts = [(float(x), float(y), float(z)) for x in xs for y in ys for z in zs]
     return pts
 
@@ -306,6 +315,10 @@ def build_problem_config() -> Dict[str, Any]:
         hk=hydro["hk_m_per_day"], porosity=hydro["porosity"],
         head_upstream=hydro["head_upstream_m"], head_downstream=hydro["head_downstream_m"],
         Lx=GRID_DEFAULTS["Lx"])
+    # The ADE operator is intentionally public. Hidden/future observations remain
+    # private, but agents should not have to infer source-flux normalization or
+    # the finite-region discretization by probing the judge.
+    public_hydro = dict(hydro)
     source_bounds = source_zone_bounds(grid)
     z_min = top_layer_center_z(source_bounds["source_x_max_m"]) - 5.0
     z_max = GRID_DEFAULTS["z_top_flat"]
@@ -333,7 +346,30 @@ def build_problem_config() -> Dict[str, Any]:
             "bottom_profile_x_m": BOTTOM_PROFILE["x_ref_m"],
             "bottom_profile_z_m": BOTTOM_PROFILE["z_bot_ref_m"],
         },
-        "hydrogeological_parameters": hydro,
+        "hydrogeological_parameters": public_hydro,
+        "region_source_discretization": {
+            "nx": 5,
+            "ny": 5,
+            "nz": 3,
+            "release_steps": 9,
+            "spatial_rule": "inclusive_linspace_between_center_minus_half_length_and_center_plus_half_length",
+            "release_rule": "inclusive_linspace_between_t_start_and_t_start_plus_duration",
+            "normalization": "Each sub-source/release term receives C0/(nx*ny*nz*release_steps).",
+        },
+        "public_forward_model_reference": {
+            "implementation_file": "public_forward_model.py",
+            "validator_file": "local_validate_forward_model.py",
+            "point_kernel": (
+                "3D ADE point response with dx=x-source_x-v*t/R, "
+                "DL=alpha_L*abs(v)+Dm, DTH=alpha_TH*abs(v)+Dm, "
+                "DTV=alpha_TV*abs(v)+Dm, and amplitude "
+                "C0*q_source_m3_per_day*fallback_source_scale_factor."
+            ),
+            "evaluation_role": (
+                "The forward operator is public for reproducibility. Scores are "
+                "primarily separated by hidden-well and future-time prediction."
+            ),
+        },
         "borden_source_zone_from_original_scene": {
             **SOURCE_ZONE_INDICES,
             **source_bounds,
@@ -353,19 +389,16 @@ def build_problem_config() -> Dict[str, Any]:
             "half_length_z_min": 0.5,
             "half_length_z_max": 5.0,
             "C0_min": 20.0,
-            "C0_max": 800.0,
+            "C0_max": 650.0,
             "t_start_min": 0.0,
             "t_start_max": 3000.0,
             "duration_min": 100.0,
             "duration_max": 8000.0,
         },
-        "region_source_discretization": {
-            "nx": 5,
-            "ny": 5,
-            "nz": 1,
-            "release_steps": 9,
-            "note": "Judge approximates rectangular-region finite release by superposing point-source ADE responses over sub-source points and release times.",
-        },
+        "region_source_model_note": (
+            "The ADE finite-region forward operator is public. Hidden/future "
+            "monitoring observations and the true source parameters remain private."
+        ),
         "known_files_for_agent": {
             "well_file": "public_wells.csv",
             "monitoring_file": "public_monitoring_data.csv",
@@ -383,7 +416,7 @@ def build_problem_config() -> Dict[str, Any]:
             "concentration_observed_mg_L": "observed concentration with measurement noise",
             "above_detection_limit": "whether observed concentration is above detection limit",
         },
-        "important_note": "The judge evaluates finite-duration rectangular-region source predictions on withheld monitoring wells/times. Easy format/prior checks sum to <=15 points; hidden monitoring prediction dominates the score.",
+        "important_note": "The judge evaluates finite-duration rectangular-region source predictions on withheld monitoring wells/times. Easy format/prior checks are small; hidden monitoring prediction and physical source consistency dominate the score.",
     }
 
 
@@ -407,6 +440,12 @@ def default_hidden_wells() -> pd.DataFrame:
         ("H02", 500.0, 270.0),
         ("H03", 610.0, 235.0),
         ("H04", 760.0, 275.0),
+        ("H05", 340.0, 260.0),
+        ("H06", 430.0, 190.0),
+        ("H07", 580.0, 180.0),
+        ("H08", 650.0, 300.0),
+        ("H09", 700.0, 220.0),
+        ("H10", 840.0, 245.0),
     ]
     return pd.DataFrame([{"well_id": w, "x": x, "y": y, "z": top_layer_center_z(x)-0.3} for w, x, y in rows])
 

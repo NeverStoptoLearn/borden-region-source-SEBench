@@ -26,11 +26,11 @@
 
 3. `templates/hidden_forward_model.py`
    - 修改原因：judge 端需要根据 Agent 输出的区域源参数计算隐藏监测井预测浓度。
-   - 核心变化：自包含有限持续区域源正演逻辑，不依赖 generator。
+   - 核心变化：自包含有限持续区域源正演逻辑，不依赖 generator；修复 `nz=1` 时只取垂向下边界的离散漏洞，单点离散改为取中心点，默认垂向离散改为 3 层。
 
 4. `templates/evaluate.py`
    - 修改原因：原评分标准过多依赖格式/说明项，不能满足“前期浅层结果低分”的任务目标。
-   - 核心变化：隐藏井预测 35 分、未来时间预测 20 分、区域形状 15 分、物理合理性 15 分；简单格式/先验/说明最多 15 分；低质量隐藏预测触发封顶。
+   - 核心变化：隐藏井和未来时间预测仍作为主指标，但不再向 Agent 暴露 hidden/future RMSE；新增源区几何、含水层垂向范围、原始 source-zone 范围、区域形状/时序/质量代理一致性检查；物理约束失败触发封顶。
 
 5. `templates/README.md`
    - 修改原因：任务题干从点源反演改为有限持续区域源反演。
@@ -43,6 +43,7 @@
 
 8. `templates/borden_inverse.json`
    - 修改原因：SE-Bench agent prompt 与 setup 需要同步区域源任务。
+   - 核心变化：`judge.parser` 改为 `structured_json`，`judge.selection` 改为 `score_first`；结构化结果不再硬编码 `pass_rate=1.0`。
 
 9. `templates/README_DEPLOY.md`
    - 修改原因：部署说明路径和任务描述更新。

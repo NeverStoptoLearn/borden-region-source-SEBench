@@ -30,7 +30,7 @@ cp /root/borden_inverse_pkg/borden_adepy_generated_task/generated/tasks/borden_i
 Open a persistent terminal:
 
 ```bash
-cd /root/borden_inverse_pkg/borden_adepy_generated_task/generated_noisy_slope_v2
+cd /root/borden_inverse_pkg/borden_adepy_generated_task/generated_noisy_slope_v3
 python3 -m http.server 8000 --bind 0.0.0.0
 ```
 
@@ -69,5 +69,7 @@ uv run python -m sebench run --task borden_inverse --agent codex-or --model gpt-
 
 - The new task is a finite-duration rectangular-region source inverse problem, not a point-source inverse problem.
 - Agent-visible public observations are noisy/censored and do not include clean concentrations.
-- Easy points are capped tightly; hidden monitoring prediction has a gentle low-score slope and dominates the score.
+- Easy points are capped tightly; hidden monitoring prediction dominates the strict final score only after the submitted `forward_model.py` passes both static relevance and dynamic public ADE correctness gates. The dynamic ADE threshold is `7.5 / 10`; below it, public sanity, hidden/future prediction, hidden/future log fit, and region physics are zeroed.
+- Iterative feedback returns `FINAL_SCORE`, continuous `LEARNING_SCORE`/component feedback, `ADE_CORRECTNESS_SCORE`, `ADE_CORRECTNESS_STATUS`, coarse ADE probe bands, metric bands, cap reason, weakest component, model/physics failures, and a next-step hint without exposing hidden observations or true source parameters.
+- Physical source-region constraints are enforced: the rectangle must stay inside the domain, saturated aquifer, and original Borden source-zone prior.
 - Existing Borden grid/hydrogeological parameters are reused.

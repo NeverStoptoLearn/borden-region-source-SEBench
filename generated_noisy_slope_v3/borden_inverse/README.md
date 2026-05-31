@@ -32,6 +32,8 @@ Create `answer.json` in the task root using this schema:
     "porosity": 0.0,
     "retardation_factor": 1.0,
     "lambda_per_day": 0.0,
+    "implementation_file": "forward_model.py",
+    "implementation_function": "predict_from_answer",
     "numerical_approach": "brief description of forward model and optimization"
   },
   "method": "brief description of your inversion method"
@@ -46,21 +48,84 @@ Create `answer.json` in the task root using this schema:
 - `transport_model`: your groundwater solute transport construction. Include the
   ADE/reaction governing equation, public hydrogeologic parameters used, and the
   numerical or analytical approximation used to predict concentrations.
+- `implementation_file` and `implementation_function`: point to your submitted
+  ADE forward model implementation. The judge checks that this file exists and
+  implements a finite-region advection-dispersion-reaction source model coupled
+  to the values in `answer.json`.
 
 All parameters must stay within `public_problem_config.json` → `source_search_bounds_for_agent`.
 
+## Required Forward Model
+
+Submit `forward_model.py` with a function named `predict_from_answer` or
+`predict_concentrations`. The function should use the same finite rectangular
+source parameters from `answer.json` and public hydrogeologic parameters to
+predict concentrations for supplied wells and times.
+
+The model must explicitly implement or approximate the ADE/reaction source
+equation, including advection, anisotropic dispersion, retardation/reaction,
+finite release timing, and spatial superposition over the rectangular region.
+Answer-only parameter sweeps without a coupled ADE forward model are capped at
+the easy format/bounds level.
+
+The ADE forward operator is public. `public_forward_model.py`,
+`local_validate_forward_model.py`, and the source-flux/discretization constants
+in `public_problem_config.json` define the reference finite-region ADE
+calculation. Copy or adapt that implementation for your submitted
+`forward_model.py`, then focus on the inverse problem.
+
+The judge still runs public ADE probes to verify that `forward_model.py`
+matches the public operator. Hidden/future prediction quality is the main
+ranking signal: a source that does not predict withheld or future monitoring
+readings cannot receive a high score from format, public fit, or source-prior
+proximity alone.
+
+## Project-Style Deliverables
+
+This task is scored as a staged source-inversion modeling project, not only as a
+single parameter guess. In addition to `answer.json` and `forward_model.py`,
+submit the files that document and reproduce your workflow:
+
+- `data_audit.md` and `data_audit.json`: coordinate system, units, well/time
+  alignment, detection-limit handling, breakthrough-curve summary, and data
+  quality checks.
+- `forward_validation.csv` and `forward_validation.md`: public forward-model
+  validation runs, source-superposition checks, finite release timing checks,
+  and any numerical assumptions.
+- `inversion_config.json`, `inverse_solver.py`, and `objective_report.md`:
+  inverse parameterization, search bounds, objective function, censoring/noise
+  treatment, baseline inversion behavior, and reproducible commands.
+- `optimization_trace.csv`, `candidate_sources.json`, `fit_diagnostics.csv`,
+  and `residual_analysis.md`: optimization history, multi-start/candidate
+  comparison, public residual diagnosis, and reasons for selecting the current
+  source.
+- `public_predictions.csv`, `uncertainty_report.json`, and `report.md`: final
+  public predictions, uncertainty/non-uniqueness discussion, limitations, and
+  summary of the selected source hypothesis.
+
+The judge keeps exact hidden-well and future-time residuals private. Internally,
+it still uses process scoring over schema/bounds, forward-model relevance, ADE
+correctness, workflow, public fit, hidden fit, future fit, and source physics.
+Iterative feedback is phrased like a project review: it reports
+data/model/inversion stage quality, public residual issues, and whether the
+withheld predictive review is defensible, without exposing hidden residuals,
+component scores, or direct parameter-tuning hints.
+
 ## Provided files
 
-- `public_problem_config.json`: Borden grid, hydrogeological parameters, source prior bounds, and column definitions.
+- `public_problem_config.json`: Borden grid, public hydrogeological parameters, public ADE source-flux/discretization constants, source prior bounds, and column definitions.
 - `public_source_prior.json`: explicit range summary for the finite-duration rectangular-region source parameters.
 - `borden_grid.npz`: grid arrays exported from the Borden-AdePy scene, including x/y grid and bottom profile.
 - `public_wells.csv`: public monitoring-well coordinates.
 - `public_monitoring_data.csv`: noisy, censored public monitoring observations. Clean generated
   concentrations are not provided to the agent.
+- `public_forward_model.py`: public reference ADE implementation used to define the finite-region source operator.
+- `local_validate_forward_model.py`: local validator for checking your submitted `forward_model.py` against public synthetic ADE probes.
 - `baseline_solver.py`: writes a legal low-quality baseline `answer.json` from the center of the parameter bounds.
 - `answer_template.json`: required output schema.
 
-No runnable scientific starter solver is provided. You should write your own Python code to read files, construct the groundwater solute transport equation, build an ADE/AdePy or equivalent forward approximation, optimize the source parameters, and update `answer.json`.
+You should write your own inversion code to read files, use the public ADE
+operator, optimize the source parameters, and update `answer.json`.
 
 ## Mandatory baseline workflow
 
@@ -78,13 +143,15 @@ The judge does not grade old point-source location error directly. It evaluates 
 
 1. Read `answer.json`.
 2. Check required finite-region fields and parameter bounds.
-3. Use a hidden Borden-ADE region-source forward model to predict concentrations at hidden monitoring wells and hidden future times.
-4. Compare predictions with hidden readings using relative RMSE and log-scale metrics.
-5. Hidden prediction dominates the score. Easy format/prior/method/transport-equation points are capped and cannot exceed the hidden-quality caps.
-6. Region-shape and physical-consistency points are gated by hidden prediction quality.
-7. Very poor hidden/future prediction is capped at 15 points; poor-but-improving prediction is capped at 30 points; moderate prediction is capped at 45 points.
+3. Check `forward_model.py`: static ADE relevance, then dynamic public ADE probe correctness against the public operator.
+4. Score the submitted source answer with the hidden Borden-ADE region-source reference model.
+5. Compare predictions with hidden and future readings using relative RMSE and log-scale metrics. These hidden/future metrics affect the internal score and caps, but are not exposed to the agent as exact metrics or component scores.
+6. Apply scientific caps. Missing or unusable `forward_model.py` is capped, and ADE probe failures limit end-to-end credit, but the ADE operator is public so high-score separation comes primarily from hidden/future prediction.
+7. Apply strict inversion caps. If hidden/future prediction earns no useful credit, total score is capped below 15; weak hidden/future prediction is capped below 30; moderate prediction remains capped until both withheld and future behavior are credible.
+8. Region-shape and physical-consistency points require adequate hidden/future prediction support. A physically plausible-looking source with poor withheld/future prediction receives no region-physics credit.
+9. During iterative judge-server runs, the strict score is time-capped below 15 for 30 minute runs, below 30 for 2 hour runs, and below 70 for runs up to 48 hours.
 
-If hidden monitoring prediction is poor, the final score is capped. This makes early baseline or shallow point-source fits low-scoring, while still allowing genuine improvement through better region-source inversion.
+This makes the task behave like a scientific inverse problem: high scores require both a credible ADE forward equation and a source estimate that predicts withheld/future monitoring data, while iterative feedback remains close to a real project review.
 
 ## Rules
 
@@ -92,6 +159,9 @@ If hidden monitoring prediction is poor, the final score is capped. This makes e
 - Do not hard-code hidden monitoring readings.
 - Do not modify judge files.
 - Do not call FloPy, MODFLOW, MT3DMS, or external groundwater executables.
+- Do not submit answer-only parameter sweeps. Hidden/future metric credit requires
+  a coupled `forward_model.py` ADE implementation that uses the submitted source
+  parameters and matches the public finite-region ADE operator.
 - You may use Python libraries such as NumPy, SciPy, pandas, matplotlib, pymoo, and AdePy if available.
 - Submit all scripts/results needed to reproduce your `answer.json`.
 
@@ -105,16 +175,20 @@ write_public_predictions.py, or any other script during scoring.
 Therefore, after every meaningful inversion or optimization step, you must immediately
 overwrite the task-root answer.json with the best current source parameters.
 
-If answer.json is unchanged, the score and all METRICS will remain unchanged, even if
+If answer.json is unchanged, the score and evaluation result will remain unchanged, even if
 you create new Python scripts, reports, or prediction files.
 
 Recommended workflow:
 
 1. Run python baseline_solver.py only as an initial fallback.
-2. Implement and run your inversion script.
-3. After each improved parameter set is found, write it to answer.json.
-4. Run python validate_answer.py if available.
-5. Submit only after confirming that answer.json has changed.
+2. Copy or adapt `public_forward_model.py` to `forward_model.py`.
+3. Prepare `data_audit.md` / `data_audit.json` from public wells and public monitoring data.
+4. Run `python local_validate_forward_model.py` until the public ADE checks pass, then write `forward_validation.csv` / `forward_validation.md`.
+5. Implement the inversion configuration, objective function, and baseline solver evidence.
+6. Run optimization, keep `optimization_trace.csv`, `candidate_sources.json`, `fit_diagnostics.csv`, and `residual_analysis.md` current.
+7. After each improved parameter set is found, write it to answer.json.
+8. Write `public_predictions.csv`, `uncertainty_report.json`, and `report.md`.
+9. Submit only after confirming that answer.json and workflow evidence have changed.
 
 Before submitting, run:
     sha256sum answer.json
