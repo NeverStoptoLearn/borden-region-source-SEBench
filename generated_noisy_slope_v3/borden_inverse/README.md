@@ -111,6 +111,25 @@ data/model/inversion stage quality, public residual issues, and whether the
 withheld predictive review is defensible, without exposing hidden residuals,
 component scores, or direct parameter-tuning hints.
 
+Visible judge feedback uses natural-language review fields:
+
+- `REVIEW_STATUS`: whether the submission is invalid, needs revision,
+  provisional, acceptable, or technically defensible.
+- `PROCESS_STAGE`: the current workflow stage, such as setup, forward modeling,
+  public calibration, baseline inversion, diagnostics, or final package review.
+- `MODEL_STATUS`: whether the submitted ADE forward model is missing, failed,
+  needs rebuild/review, acceptable, or reliable.
+- `PUBLIC_FIT`: whether public monitoring curves are not yet reviewable, weak,
+  partial, or adequate for baseline inversion.
+- `VALIDATION_STATUS`: a coarse withheld predictive review, without hidden
+  residuals or hidden well identities.
+- `NEXT_REVIEW`: the next project-review action, phrased without hidden-answer
+  parameter hints.
+- `data_understanding`, `forward_model`, `inversion_framework`,
+  `optimization_evidence`, `report_quality`, `public_residual_review`, and
+  `validation_review`: qualitative review comments for the main workflow
+  evidence.
+
 ## Provided files
 
 - `public_problem_config.json`: Borden grid, public hydrogeological parameters, public ADE source-flux/discretization constants, source prior bounds, and column definitions.

@@ -201,12 +201,12 @@ The private main metrics are:
 - `future_public rRMSE`
 - `future_public log_rmse`
 
-During iterative evaluation, the Agent sees review fields such as `REVIEW_STATUS`, `PROCESS_STAGE`, `MODEL_STATUS`, `PUBLIC_FIT`, `VALIDATION_STATUS`, `NEXT_REVIEW`, and qualitative stage reviews. Exact hidden/future metric values, component scores, cap internals, hidden observations, true source parameters, and pointwise hidden residuals are kept inside `score.json` and are not printed in the structured result block.
+During iterative evaluation, the Agent sees natural-language review fields such as `REVIEW_STATUS`, `PROCESS_STAGE`, `MODEL_STATUS`, `PUBLIC_FIT`, `VALIDATION_STATUS`, `NEXT_REVIEW`, and qualitative stage reviews. Exact hidden/future metric values, component scores, cap internals, hidden observations, true source parameters, and pointwise hidden residuals are kept inside `score.json` and are not printed in the structured result block.
 
 The intended interpretation is:
 
 - structured `score`: official internal process score after caps. Use this for final ranking.
-- review fields: qualitative feedback derived from the internal score state, phrased as project review rather than hidden metric disclosure.
+- review fields: qualitative natural-language feedback derived from the internal score state, phrased as project review rather than hidden metric disclosure.
 - `score.json`: author-side internal diagnostics; not intended as agent-visible feedback.
 
 See `JUDGE_FEEDBACK_POLICY.md` for the saved policy summary.
@@ -236,7 +236,7 @@ Current thresholds:
 
 ### 5.2 Quality Caps
 
-Quality caps are applied after computing `RAW_TOTAL_SCORE`:
+Quality caps are applied after computing the internal raw process score:
 
 ```text
 hidden_well rRMSE >= 1.60 or future_public rRMSE >= 1.60:
@@ -296,11 +296,13 @@ cat /tmp/manual_score.json
 Expected output includes:
 
 ```text
-RAW_TOTAL_SCORE ...
 CASE borden_inverse OK score=...
 TOTAL_SCORE ...
-PREDICTION_BAND ...
-PHYSICAL_CONSTRAINTS ...
+REVIEW_STATUS ...
+PROCESS_STAGE ...
+MODEL_STATUS ...
+PUBLIC_FIT ...
+VALIDATION_STATUS ...
 ```
 
 ---
@@ -391,7 +393,7 @@ cd /root/SE-bench-main/logs/runs/$RUN_ID/borden_inverse/submissions
 
 for d in $(ls -d agent-* auto-* 2>/dev/null | sort -V); do
   echo "================ $d ================"
-  grep -E "RAW_TOTAL_SCORE|CASE borden_inverse|TOTAL_SCORE|PREDICTION_BAND|PHYSICAL_CONSTRAINTS" "$d/test_output.txt"
+  grep -E "CASE borden_inverse|TOTAL_SCORE|REVIEW_STATUS|PROCESS_STAGE|MODEL_STATUS|PUBLIC_FIT|VALIDATION_STATUS" "$d/test_output.txt"
 done
 ```
 
